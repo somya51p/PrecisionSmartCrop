@@ -186,10 +186,14 @@ const VideoClickCapture: React.FC = () => {
     if (!videoId) return;
     setTrackLoading(true);
     try {
-      const response = await fetch(`https://9610-130-248-126-34.ngrok-free.app/get_smartcrop/${videoId}`);
+      const response = await fetch(`https://9610-130-248-126-34.ngrok-free.app/get_smartcrop/${videoId}`, {
+        method: 'GET',
+        headers: { 'ngrok-skip-browser-warning': 'somya' },
+      });
       if (!response.ok) throw new Error('Failed to track object');
       const data = await response.json();
-      setVideoUrl(data.video_url);
+      console.log('Data', data);
+      setVideoUrl(data.smartcrop_url);
       setMaskData(null);
     } catch (err) {
       // Optionally handle error
@@ -317,14 +321,14 @@ const VideoClickCapture: React.FC = () => {
           {trackLoading ? 'Tracking...' : 'Track object'}
         </button>
       )}
-      {/* {coords && (
+      {coords && (
         <div className="mt-4 text-lg" style={{ textAlign: 'center' }}>
           🧭 Clicked Coordinates (Bottom-Left Origin):  <br />
           X: {coords.x}, Y: {coords.y}
           <br />
           📸 Frame ID: {frameId}
         </div>
-      )} */}
+      )}
     </div>
   );
 };
