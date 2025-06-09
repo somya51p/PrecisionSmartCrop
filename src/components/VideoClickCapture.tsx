@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 
 const FPS = 30;
 
@@ -16,6 +16,7 @@ const VideoClickCapture: React.FC = () => {
   const [videoId, setVideoId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [maskData, setMaskData] = useState<number[][] | null>(null);
 
   const handlePlayPause = () => {
     if (!videoRef.current) return;
@@ -26,12 +27,42 @@ const VideoClickCapture: React.FC = () => {
     }
   };
 
-  const handleClick = (e: React.MouseEvent<HTMLVideoElement>) => {
+  const handleClick = async (e: React.MouseEvent<HTMLVideoElement>) => {
     const rect = e.currentTarget.getBoundingClientRect(); // video position on screen
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const displayX = e.clientX - rect.left;
+    const displayY = e.clientY - rect.top;
+    // Scale to original video size
+    const video = videoRef.current;
+    let x = Math.round(displayX);
+    let y = Math.round(displayY);
+    if (video) {
+      const scaleX = video.videoWidth / rect.width;
+      const scaleY = video.videoHeight / rect.height;
+      x = Math.round(displayX * scaleX);
+      y = Math.round(displayY * scaleY);
+    }
+    setCoords({ x, y });
 
-    setCoords({ x: Math.round(x), y: Math.round(y) });
+    // Only call API if videoId and frameId are available
+    if (videoId && typeof frameId === 'number') {
+      try {
+        const response = await fetch('https://9610-130-248-126-34.ngrok-free.app/get_mask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            video_id: videoId,
+            frame_id: frameId,
+            points: [[x, y]],
+            labels: [1]
+          })
+        });
+        if (!response.ok) throw new Error('Failed to get mask');
+        const data = await response.json();
+        setMaskData(data.mask_data);
+      } catch (err) {
+        setMaskData(null);
+      }
+    }
   };
 
   // Keep isPlaying in sync with video events
@@ -95,6 +126,34 @@ const VideoClickCapture: React.FC = () => {
     }
   };
 
+  // Draw mask overlay on canvas when maskData changes
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  useEffect(() => {
+    if (!maskData || !canvasRef.current || !videoRef.current) return;
+    const ctx = canvasRef.current.getContext('2d');
+    if (!ctx) return;
+    const width = videoRef.current.videoWidth;
+    const height = videoRef.current.videoHeight;
+    canvasRef.current.width = width;
+    canvasRef.current.height = height;
+    ctx.clearRect(0, 0, width, height);
+    const imageData = ctx.createImageData(width, height);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = (y * width + x) * 4;
+        if (maskData[y] && maskData[y][x] === 1) {
+          imageData.data[idx] = 0;     // R
+          imageData.data[idx + 1] = 200; // G
+          imageData.data[idx + 2] = 255; // B
+          imageData.data[idx + 3] = 100; // Alpha (semi-transparent)
+        } else {
+          imageData.data[idx + 3] = 0; // Fully transparent
+        }
+      }
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }, [maskData, videoRef.current?.videoWidth, videoRef.current?.videoHeight]);
+
   return (
     <div className="p-4 max-w-3xl mx-auto">
       <form onSubmit={handleUrlSubmit} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: 24, gap: 12 }}>
@@ -131,12 +190,12 @@ const VideoClickCapture: React.FC = () => {
           {loading ? 'Loading...' : 'Load Video'}
         </button>
       </form>
-      {error && <div className="text-red-500 mb-2">{error}</div>}
+      {error && <div className="text-red-500 mb-2" style={{ textAlign: 'center' }}>{error}</div>}
       {videoId && (
         <div className="mb-2 text-green-700" style={{ textAlign: 'center', marginBottom: 24 }}>Video ID: {videoId}</div>
       )}
       {videoId && videoUrl && (
-        <>
+        <div style={{ position: 'relative', width: 840, margin: '0 auto' }}>
           <video
             ref={videoRef}
             width="840"
@@ -152,6 +211,20 @@ const VideoClickCapture: React.FC = () => {
             src={videoUrl}
             style={{ display: 'block', margin: '0 auto' }}
           />
+          {maskData && (
+            <canvas
+              ref={canvasRef}
+              style={{
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                pointerEvents: 'none',
+                width: '840px',
+                height: videoRef.current ? `${videoRef.current.clientHeight}px` : 'auto',
+                zIndex: 2
+              }}
+            />
+          )}
           <div className="flex items-center mt-2 bg-white rounded p-2" style={{ width: "840px", margin: '0 auto' }}>
             <button
               onClick={handlePlayPause}
@@ -172,10 +245,10 @@ const VideoClickCapture: React.FC = () => {
             />
             <span className="text-black ml-2" style={{ minWidth: 40 }}>{duration.toFixed(2)}</span>
           </div>
-        </>
+        </div>
       )}
       {coords && (
-        <div className="mt-4 text-lg">
+        <div className="mt-4 text-lg" style={{ textAlign: 'center' }}>
           🧭 Clicked Coordinates (Bottom-Left Origin):  <br />
           X: {coords.x}, Y: {coords.y}
           <br />
