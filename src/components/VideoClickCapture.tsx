@@ -17,6 +17,7 @@ const VideoClickCapture: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [maskData, setMaskData] = useState<number[][] | null>(null);
+  const [trackLoading, setTrackLoading] = useState(false);
 
   const handlePlayPause = () => {
     if (!videoRef.current) return;
@@ -138,6 +139,7 @@ const VideoClickCapture: React.FC = () => {
     canvasRef.current.height = height;
     ctx.clearRect(0, 0, width, height);
     const imageData = ctx.createImageData(width, height);
+    // Draw mask
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         const idx = (y * width + x) * 4;
@@ -152,7 +154,49 @@ const VideoClickCapture: React.FC = () => {
       }
     }
     ctx.putImageData(imageData, 0, 0);
+
+    // Draw border (blue, 2px thick)
+    ctx.save();
+    ctx.strokeStyle = '#2196f3'; // blue
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        if (maskData[y] && maskData[y][x] === 1) {
+          // Check 4-neighbors for border
+          if (
+            !maskData[y][x - 1] ||
+            !maskData[y][x + 1] ||
+            !(maskData[y - 1] && maskData[y - 1][x]) ||
+            !(maskData[y + 1] && maskData[y + 1][x])
+          ) {
+            ctx.moveTo(x + 0.5, y + 0.5);
+            ctx.lineTo(x + 0.5, y + 0.5);
+          }
+        }
+      }
+    }
+    ctx.stroke();
+    ctx.restore();
   }, [maskData, videoRef.current?.videoWidth, videoRef.current?.videoHeight]);
+
+  // Track object handler
+  const handleTrackObject = async () => {
+    console.log('Tracking object', videoId);
+    if (!videoId) return;
+    setTrackLoading(true);
+    try {
+      const response = await fetch(`https://9610-130-248-126-34.ngrok-free.app/get_smartcrop/${videoId}`);
+      if (!response.ok) throw new Error('Failed to track object');
+      const data = await response.json();
+      setVideoUrl(data.video_url);
+      setMaskData(null);
+    } catch (err) {
+      // Optionally handle error
+    } finally {
+      setTrackLoading(false);
+    }
+  };
 
   return (
     <div className="p-4 max-w-3xl mx-auto">
@@ -212,18 +256,20 @@ const VideoClickCapture: React.FC = () => {
             style={{ display: 'block', margin: '0 auto' }}
           />
           {maskData && (
-            <canvas
-              ref={canvasRef}
-              style={{
-                position: 'absolute',
-                left: 0,
-                top: 0,
-                pointerEvents: 'none',
-                width: '840px',
-                height: videoRef.current ? `${videoRef.current.clientHeight}px` : 'auto',
-                zIndex: 2
-              }}
-            />
+            <>
+              <canvas
+                ref={canvasRef}
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  pointerEvents: 'none',
+                  width: '840px',
+                  height: videoRef.current ? `${videoRef.current.clientHeight}px` : 'auto',
+                  zIndex: 2
+                }}
+              />
+            </>
           )}
           <div className="flex items-center mt-2 bg-white rounded p-2" style={{ width: "840px", margin: '0 auto' }}>
             <button
@@ -247,14 +293,38 @@ const VideoClickCapture: React.FC = () => {
           </div>
         </div>
       )}
-      {coords && (
+      {maskData && (
+        <button
+          onClick={handleTrackObject}
+          disabled={trackLoading}
+          style={{
+            position: 'absolute',
+            left: '50%',
+            top: 720,
+            transform: 'translateX(-50%)',
+            zIndex: 3,
+            background: '#2563eb',
+            color: 'white',
+            padding: '10px 24px',
+            borderRadius: 8,
+            border: 'none',
+            fontWeight: 600,
+            fontSize: 16,
+            cursor: trackLoading ? 'not-allowed' : 'pointer',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.08)'
+          }}
+        >
+          {trackLoading ? 'Tracking...' : 'Track object'}
+        </button>
+      )}
+      {/* {coords && (
         <div className="mt-4 text-lg" style={{ textAlign: 'center' }}>
           🧭 Clicked Coordinates (Bottom-Left Origin):  <br />
           X: {coords.x}, Y: {coords.y}
           <br />
           📸 Frame ID: {frameId}
         </div>
-      )}
+      )} */}
     </div>
   );
 };
