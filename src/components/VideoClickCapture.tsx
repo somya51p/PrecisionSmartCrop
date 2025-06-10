@@ -20,6 +20,7 @@ const VideoClickCapture: React.FC = () => {
   const [trackLoading, setTrackLoading] = useState(false);
   const [totalFrames, setTotalFrames] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
+  const [smartcropUrl, setSmartcropUrl] = useState<string | null>(null);
   const API_BASE = process.env.REACT_APP_API_BASE_URL;
   console.log('API_BASE', API_BASE);
 
@@ -219,9 +220,7 @@ const VideoClickCapture: React.FC = () => {
       if (!response.ok) throw new Error('Failed to track object');
       const data = await response.json();
       console.log('Data', data);
-      setVideoUrl('');
-      setInputUrl(data.smartcrop_url);
-      setVideoId('');
+      setSmartcropUrl(data.smartcrop_url);
       setMaskData(null);
     } catch (err) {
       // Optionally handle error
@@ -251,194 +250,220 @@ const VideoClickCapture: React.FC = () => {
   };
 
   return (
-    <div className="p-4 max-w-6xl mx-auto" style={{ minHeight: '100vh', background: '#18181b', paddingTop: 70 }}>
-      <div style={{ display: 'flex', flexDirection: 'row', gap: 40, alignItems: 'flex-start', justifyContent: 'center' }}>
-        {/* Left column: Video, input, controls */}
-        <div style={{ background: '#23232a', borderRadius: 16, padding: 24, boxSizing: 'border-box' }}>
-          <form onSubmit={handleUrlSubmit} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: 24, gap: 12, width: '100%' }}>
-            <input
-              type="text"
-              value={inputUrl}
-              onChange={handleUrlChange}
-              placeholder="Enter video URL"
-              style={{
-                padding: '10px 16px',
-                borderRadius: 8,
-                border: '1px solid #cbd5e1',
-                background: '#fff',
-                boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-                fontSize: 16,
-                width: 400,
-                marginRight: 12
-              }}
-              disabled={videoId === '' && !!inputUrl}
-            />
-            {videoId === '' && inputUrl ? (
-              <button
-                type="button"
-                onClick={handleCopyUrl}
-                style={{
-                  background: copied ? '#22c55e' : '#2563eb',
-                  color: 'white',
-                  padding: '10px 24px',
-                  borderRadius: 8,
-                  border: 'none',
-                  fontWeight: 600,
-                  fontSize: 16,
-                  cursor: 'pointer',
-                  boxShadow: '0 1px 4px rgba(0,0,0,0.08)'
-                }}
-              >
-                {copied ? 'Copied!' : 'Copy URL'}
-              </button>
-            ) : (
-              <button
-                type="submit"
-                style={{
-                  background: '#2563eb',
-                  color: 'white',
-                  padding: '10px 24px',
-                  borderRadius: 8,
-                  border: 'none',
-                  fontWeight: 600,
-                  fontSize: 16,
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 1px 4px rgba(0,0,0,0.08)'
-                }}
-                disabled={loading}
-              >
-                {loading ? 'Importing...' : 'Import Video'}
-              </button>
-            )}
-          </form>
-          {error && <div className="text-red-500 mb-2" style={{ textAlign: 'left', color: '#fff' }}>{error}</div>}
-          {videoId && videoUrl && (
-            <div style={{ position: 'relative', width: 840, margin: '0 auto' }}>
-              <video
-                ref={videoRef}
-                width="840"
-                onClick={handleClick}
-                onPause={() => {
-                  setFrameId(Math.floor((videoRef.current?.currentTime || 0) * FPS));
-                  handlePause();
-                }}
-                onPlay={handlePlay}
-                onTimeUpdate={handleTimeUpdate}
-                onLoadedMetadata={handleLoadedMetadata}
-                controls={false}
-                src={videoUrl}
-                style={{ display: 'block', margin: '0 auto', borderRadius: 8 }}
-              />
-              {maskData && (
-                <canvas
-                  ref={canvasRef}
-                  style={{
-                    position: 'absolute',
-                    left: 0,
-                    top: 0,
-                    pointerEvents: 'none',
-                    width: '840px',
-                    height: videoRef.current ? `${videoRef.current.clientHeight}px` : 'auto',
-                    zIndex: 2,
-                    borderRadius: 8
-                  }}
-                />
-              )}
-              <div className="flex items-center mt-2 bg-white rounded p-2" style={{ width: "800px", margin: '0 auto', display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 16, background: '#23232a', padding: '16px', borderRadius: 12 }}>
-                <button
-                  onClick={handlePlayPause}
-                  className="bg-blue-500 text-white rounded-full mr-4"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: 48,
-                    height: 48,
-                    minWidth: 48,
-                    minHeight: 48,
-                    background: '#fff',
-                    margin: 0,
-                    borderRadius: '50%'
-                  }}
-                >
-                  {isPlaying ? (
-                    // Pause icon
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <rect x="4" y="3" width="4" height="14" rx="1" fill="#2563eb"/>
-                      <rect x="12" y="3" width="4" height="14" rx="1" fill="#2563eb"/>
-                    </svg>
-                  ) : (
-                    // Play icon
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <polygon points="5,3 17,10 5,17" fill="#2563eb" />
-                    </svg>
-                  )}
-                </button>
-                <span className="mr-2" style={{ minWidth: 80, color: '#fff', fontSize: 22, fontFamily: 'monospace' }}>{formatTime(currentTime)}</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={duration}
-                  step={0.01}
-                  value={currentTime}
-                  onChange={handleSeek}
-                  className="flex-1 accent-blue-500"
-                  style={{ width: 650, height: 8 }}
-                />
-                <span className="ml-2" style={{ minWidth: 60, color: '#fff', fontSize: 22, fontFamily: 'monospace' }}>{duration.toFixed(2)}</span>
-              </div>
+    <>
+      {trackLoading && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(24,24,27,0.25)',
+          zIndex: 3,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          pointerEvents: 'none',
+        }}>
+          <div style={{
+            background: 'rgba(36,36,36,0.95)',
+            borderRadius: 16,
+            padding: '40px 48px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            boxShadow: '0 2px 16px rgba(0,0,0,0.18)',
+            pointerEvents: 'auto',
+          }}>
+            <div style={{ marginBottom: 18 }}>
+              <svg width="48" height="48" viewBox="0 0 50 50" style={{ display: 'block' }}>
+                <circle cx="25" cy="25" r="20" stroke="#2563eb" strokeWidth="6" fill="none" strokeDasharray="31.4 31.4" strokeLinecap="round">
+                  <animateTransform attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="1s" repeatCount="indefinite" />
+                </circle>
+              </svg>
             </div>
-          )}
+            <div style={{ color: '#fff', fontWeight: 600, fontSize: 20, letterSpacing: 0.5 }}>Tracking object...</div>
+          </div>
         </div>
-        {/* Right column: Buttons, info, status */}
-        <div style={{ minWidth: 320, maxWidth: 400, background: '#23232a', borderRadius: 16, padding: 24, color: 'white', minHeight: 500 }}>
-          {/* {videoId && (
-            <div className="mb-2 text-green-700" style={{ textAlign: 'center', marginBottom: 24, color: '#4ade80', fontWeight: 600 }}>
-              Video ID: {videoId}
-            </div>
-          )} */}
-          {!videoId && (
-            <div style={{ color: '#fff', background: 'rgba(36,36,36,0.85)', borderRadius: 16, padding: 20, fontSize: 16, textAlign: 'center', fontWeight: 400, marginBottom: 24 }}>
-              <span style={{ fontSize: 15, color: '#a3a3a3' }}>
-              Precision Smart Crop automatically detects and focuses on objects you select in a video. By clicking on any object, a mask will highlight it, and you can track and crop the video to keep that object in focus throughout the clip. 
-              <br/><br/>This enables precise, object-centric video editing and smart cropping with just a few clicks.
-              </span>
-            </div>
-          )}
-          {videoId === '' && inputUrl && (
-            <div style={{ color: '#fff', background: 'rgba(36,36,36,0.85)', borderRadius: 16, padding: 20, fontSize: 16, textAlign: 'center', fontWeight: 400, marginBottom: 24 }}>
-              <span style={{ fontSize: 15, color: '#a3a3a3' }}>
-                The smartcrop URL has been generated!<br/>
-                You can copy it and play around with it.
-              </span>
-            </div>
-          )}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 32 }}>
-            {(videoId || (videoId === '' && inputUrl)) && <button
-              onClick={handleChangeVideo}
-              style={{
-                width: '100%',
-                background: '#111',
-                color: '#fff',
-                padding: '16px 0',
-                borderRadius: 9999,
-                border: 'none',
-                fontWeight: 600,
-                fontSize: 18,
-                cursor: 'pointer',
-                boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 12,
-                letterSpacing: 0.5
-              }}
-            >
-              <span style={{marginLeft: 6}}>Change video</span>
-            </button>}
-            {coords && videoId ? (
+      )}
+      <div className="p-4 max-w-6xl mx-auto" style={{ minHeight: '100vh', background: '#18181b', paddingTop: 70 }}>
+        <div style={{ display: 'flex', flexDirection: 'row', gap: 40, alignItems: 'flex-start', justifyContent: 'center' }}>
+          {/* Left column: Video, input, controls */}
+          <div style={{ background: '#23232a', borderRadius: 16, padding: 24, boxSizing: 'border-box' }}>
+            <form onSubmit={handleUrlSubmit} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: 24, gap: 12, width: '100%' }}>
+              <input
+                type="text"
+                value={inputUrl}
+                onChange={handleUrlChange}
+                placeholder="Enter video URL"
+                style={{
+                  padding: '10px 16px',
+                  borderRadius: 8,
+                  border: '1px solid #cbd5e1',
+                  background: '#fff',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+                  fontSize: 16,
+                  width: 400,
+                  marginRight: 12
+                }}
+                disabled={videoId === '' && !!inputUrl}
+              />
               <button
-                onClick={handleStartOver}
+                  type="submit"
+                  style={{
+                    background: '#2563eb',
+                    color: 'white',
+                    padding: '10px 24px',
+                    borderRadius: 8,
+                    border: 'none',
+                    fontWeight: 600,
+                    fontSize: 16,
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 1px 4px rgba(0,0,0,0.08)'
+                  }}
+                  disabled={loading}
+                >
+                  {loading ? 'Importing...' : 'Import Video'}
+                </button>
+            </form>
+            {error && <div className="text-red-500 mb-2" style={{ textAlign: 'left', color: '#fff' }}>{error}</div>}
+            {videoId && videoUrl && (
+              <div style={{ position: 'relative', width: 840, margin: '0 auto' }}>
+                <video
+                  ref={videoRef}
+                  width="840"
+                  onClick={handleClick}
+                  onPause={() => {
+                    setFrameId(Math.floor((videoRef.current?.currentTime || 0) * FPS));
+                    handlePause();
+                  }}
+                  onPlay={handlePlay}
+                  onTimeUpdate={handleTimeUpdate}
+                  onLoadedMetadata={handleLoadedMetadata}
+                  controls={false}
+                  src={videoUrl}
+                  style={{ display: 'block', margin: '0 auto', borderRadius: 8 }}
+                />
+                {maskData && (
+                  <canvas
+                    ref={canvasRef}
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      top: 0,
+                      pointerEvents: 'none',
+                      width: '840px',
+                      height: videoRef.current ? `${videoRef.current.clientHeight}px` : 'auto',
+                      zIndex: 2,
+                      borderRadius: 8
+                    }}
+                  />
+                )}
+                <div className="flex items-center mt-2 bg-white rounded p-2" style={{ width: "800px", margin: '0 auto', display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 16, background: '#23232a', padding: '16px', borderRadius: 12 }}>
+                  <button
+                    onClick={handlePlayPause}
+                    className="bg-blue-500 text-white rounded-full mr-4"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: 48,
+                      height: 48,
+                      minWidth: 48,
+                      minHeight: 48,
+                      background: '#fff',
+                      margin: 0,
+                      borderRadius: '50%'
+                    }}
+                  >
+                    {isPlaying ? (
+                      // Pause icon
+                      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="4" y="3" width="4" height="14" rx="1" fill="#2563eb"/>
+                        <rect x="12" y="3" width="4" height="14" rx="1" fill="#2563eb"/>
+                      </svg>
+                    ) : (
+                      // Play icon
+                      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <polygon points="5,3 17,10 5,17" fill="#2563eb" />
+                      </svg>
+                    )}
+                  </button>
+                  <span className="mr-2" style={{ minWidth: 80, color: '#fff', fontSize: 22, fontFamily: 'monospace' }}>{formatTime(currentTime)}</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={duration}
+                    step={0.01}
+                    value={currentTime}
+                    onChange={handleSeek}
+                    className="flex-1 accent-blue-500"
+                    style={{ width: 650, height: 8 }}
+                  />
+                  <span className="ml-2" style={{ minWidth: 60, color: '#fff', fontSize: 22, fontFamily: 'monospace' }}>{duration.toFixed(2)}</span>
+                </div>
+              </div>
+            )}
+          </div>
+          {/* Right column: Buttons, info, status */}
+          <div style={{ minWidth: 320, maxWidth: 400, background: '#23232a', borderRadius: 16, padding: 24, color: 'white', minHeight: 500 }}>
+            {/* {videoId && (
+              <div className="mb-2 text-green-700" style={{ textAlign: 'center', marginBottom: 24, color: '#4ade80', fontWeight: 600 }}>
+                Video ID: {videoId}
+              </div>
+            )} */}
+            {!videoId && !smartcropUrl && (
+              <div style={{ color: '#fff', background: 'rgba(36,36,36,0.85)', borderRadius: 16, padding: 20, fontSize: 16, textAlign: 'center', fontWeight: 400, marginBottom: 24 }}>
+                <span style={{ fontSize: 15, color: '#a3a3a3' }}>
+                Precision Smart Crop automatically detects and focuses on objects you select in a video. By clicking on any object, a mask will highlight it, and you can track and crop the video to keep that object in focus throughout the clip. 
+                <br/><br/>This enables precise, object-centric video editing and smart cropping with just a few clicks.
+                </span>
+              </div>
+            )}
+            {smartcropUrl && (
+              <div style={{ color: '#fff', background: 'rgba(36,36,36,0.85)', borderRadius: 16, padding: 20, fontSize: 16, textAlign: 'center', fontWeight: 400, marginBottom: 24 }}>
+                <span style={{ fontSize: 15, color: '#a3a3a3' }}>
+                  The smartcrop URL has been generated!<br/>
+                  You can copy it and play around with it.
+                </span>
+                <div style={{ margin: '18px 0 0 0', display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <span style={{
+                    background: '#18181b',
+                    color: '#fff',
+                    borderRadius: 8,
+                    padding: '8px 12px',
+                    fontSize: 14,
+                    fontFamily: 'monospace',
+                    userSelect: 'all',
+                    maxWidth: 220,
+                    overflow: 'auto',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    border: '1px solid #333'
+                  }}>{smartcropUrl}</span>
+                  <button
+                    type="button"
+                    onClick={handleCopyUrl}
+                    style={{
+                      background: copied ? '#22c55e' : '#2563eb',
+                      color: 'white',
+                      padding: '10px 24px',
+                      borderRadius: 8,
+                      border: 'none',
+                      fontWeight: 600,
+                      fontSize: 16,
+                      cursor: 'pointer',
+                      boxShadow: '0 1px 4px rgba(0,0,0,0.08)'
+                    }}
+                  >
+                    {copied ? 'Copied!' : 'Copy URL'}
+                  </button>
+                </div>
+              </div>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 32 }}>
+              {(videoId || (videoId === '' && inputUrl)) && <button
+                onClick={handleChangeVideo}
                 style={{
                   width: '100%',
                   background: '#111',
@@ -456,52 +481,76 @@ const VideoClickCapture: React.FC = () => {
                   gap: 12,
                   letterSpacing: 0.5
                 }}
-                disabled={!maskData}
               >
-                <span style={{marginLeft: 6}}>Start over</span>
-              </button>
-            ) : videoId && (
-              <div style={{ color: '#fff', background: 'rgba(36,36,36,0.85)', borderRadius: 16, padding: 20, fontSize: 16, textAlign: 'center', fontWeight: 400 }}>
-                <span style={{ fontSize: 15, color: '#a3a3a3' }}>
-                A mask will appear over the object you select, and you'll be able to focus on and track that object throughout the video.<br/>
-                  <br/>
-                  To start, click any object in the video.
-                </span>
-              </div>
-            )}
-          </div>
-          {maskData && (
-            <button
-              onClick={handleTrackObject}
-              disabled={trackLoading}
-              style={{
-                width: '100%',
-                marginBottom: 32,
-                background: '#2563eb',
-                color: 'white',
-                padding: '14px 0',
-                borderRadius: 8,
-                border: 'none',
-                fontWeight: 600,
-                fontSize: 18,
-                cursor: trackLoading ? 'not-allowed' : 'pointer',
-                boxShadow: '0 1px 4px rgba(0,0,0,0.08)'
-              }}
-            >
-              {trackLoading ? 'Tracking...' : 'Track object'}
-            </button>
-          )}
-          {/* {coords && (
-            <div className="mt-4 text-lg" style={{ textAlign: 'center', color: 'white' }}>
-              🧭 Clicked Coordinates (Bottom-Left Origin):  <br />
-              X: {coords.x}, Y: {coords.y}
-              <br />
-              📸 Frame ID: {frameId}
+                <span style={{marginLeft: 6}}>Change video</span>
+              </button>}
+              {coords && videoId ? (
+                <button
+                  onClick={handleStartOver}
+                  style={{
+                    width: '100%',
+                    background: '#111',
+                    color: '#fff',
+                    padding: '16px 0',
+                    borderRadius: 9999,
+                    border: 'none',
+                    fontWeight: 600,
+                    fontSize: 18,
+                    cursor: 'pointer',
+                    boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 12,
+                    letterSpacing: 0.5
+                  }}
+                  disabled={!maskData}
+                >
+                  <span style={{marginLeft: 6}}>Start over</span>
+                </button>
+              ) : videoId && (
+                <div style={{ color: '#fff', background: 'rgba(36,36,36,0.85)', borderRadius: 16, padding: 20, fontSize: 16, textAlign: 'center', fontWeight: 400 }}>
+                  <span style={{ fontSize: 15, color: '#a3a3a3' }}>
+                  A mask will appear over the object you select, and you'll be able to focus on and track that object throughout the video.<br/>
+                    <br/>
+                    To start, click any object in the video.
+                  </span>
+                </div>
+              )}
             </div>
-          )} */}
+            {maskData && (
+              <button
+                onClick={handleTrackObject}
+                disabled={trackLoading}
+                style={{
+                  width: '100%',
+                  marginBottom: 32,
+                  background: '#2563eb',
+                  color: 'white',
+                  padding: '14px 0',
+                  borderRadius: 8,
+                  border: 'none',
+                  fontWeight: 600,
+                  fontSize: 18,
+                  cursor: trackLoading ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.08)'
+                }}
+              >
+                {trackLoading ? 'Tracking...' : 'Track object'}
+              </button>
+            )}
+            {/* {coords && (
+              <div className="mt-4 text-lg" style={{ textAlign: 'center', color: 'white' }}>
+                🧭 Clicked Coordinates (Bottom-Left Origin):  <br />
+                X: {coords.x}, Y: {coords.y}
+                <br />
+                📸 Frame ID: {frameId}
+              </div>
+            )} */}
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };
 
