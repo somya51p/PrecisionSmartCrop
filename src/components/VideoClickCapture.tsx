@@ -18,6 +18,10 @@ const VideoClickCapture: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [maskData, setMaskData] = useState<number[][] | null>(null);
   const [trackLoading, setTrackLoading] = useState(false);
+  const [totalFrames, setTotalFrames] = useState<number | null>(null);
+  const [copied, setCopied] = useState(false);
+  const API_BASE = process.env.REACT_APP_API_BASE_URL;
+  console.log('API_BASE', API_BASE);
 
   const handlePlayPause = () => {
     if (!videoRef.current) return;
@@ -47,7 +51,7 @@ const VideoClickCapture: React.FC = () => {
     // Only call API if videoId and frameId are available
     if (videoId && typeof frameId === 'number') {
       try {
-        const response = await fetch('https://9610-130-248-126-34.ngrok-free.app/get_mask', {
+        const response = await fetch(`${API_BASE}/get_mask`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -68,7 +72,16 @@ const VideoClickCapture: React.FC = () => {
 
   // Keep isPlaying in sync with video events
   const handlePlay = () => setIsPlaying(true);
-  const handlePause = () => setIsPlaying(false);
+  const handlePause = () => {
+    setIsPlaying(false);
+    if (videoRef.current) {
+      let frame = Math.floor((videoRef.current.currentTime || 0) * FPS);
+      if (totalFrames !== null) {
+        frame = Math.min(frame, totalFrames - 1);
+      }
+      setFrameId(frame);
+    }
+  };
 
   // Update current time as video plays
   const handleTimeUpdate = () => {
@@ -90,6 +103,11 @@ const VideoClickCapture: React.FC = () => {
     if (videoRef.current) {
       videoRef.current.currentTime = time;
       setCurrentTime(time);
+      let frame = Math.floor(time * FPS);
+      if (totalFrames !== null) {
+        frame = Math.min(frame, totalFrames - 1);
+      }
+      setFrameId(frame);
     }
   };
 
@@ -105,13 +123,20 @@ const VideoClickCapture: React.FC = () => {
     setInputUrl(e.target.value);
   };
 
+  const handleCopyUrl = () => {
+    if (inputUrl) {
+      navigator.clipboard.writeText(inputUrl);
+      setCopied(true);
+    }
+  };
+
   const handleUrlSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
     setVideoId(null);
     try {
-      const response = await fetch('https://9610-130-248-126-34.ngrok-free.app/upload_video', {
+      const response = await fetch(`${API_BASE}/upload_video`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ video_url: inputUrl })
@@ -120,6 +145,7 @@ const VideoClickCapture: React.FC = () => {
       const data = await response.json();
       setVideoId(data.video_id);
       setVideoUrl(inputUrl);
+      setTotalFrames(data.total_frames);
     } catch (err: any) {
       setError('Failed to process video.');
     } finally {
@@ -186,20 +212,42 @@ const VideoClickCapture: React.FC = () => {
     if (!videoId) return;
     setTrackLoading(true);
     try {
-      const response = await fetch(`https://9610-130-248-126-34.ngrok-free.app/get_smartcrop/${videoId}`, {
+      const response = await fetch(`${API_BASE}/get_smartcrop/${videoId}`, {
         method: 'GET',
         headers: { 'ngrok-skip-browser-warning': 'somya' },
       });
       if (!response.ok) throw new Error('Failed to track object');
       const data = await response.json();
       console.log('Data', data);
-      setVideoUrl(data.smartcrop_url);
+      setVideoUrl('');
+      setInputUrl(data.smartcrop_url);
+      setVideoId('');
       setMaskData(null);
     } catch (err) {
       // Optionally handle error
     } finally {
       setTrackLoading(false);
     }
+  };
+
+  // Handler to clear only the mask
+  const handleStartOver = () => {
+    setMaskData(null);
+    setCoords(null);
+  };
+
+  // Handler to reset everything (change video)
+  const handleChangeVideo = () => {
+    setVideoId(null);
+    setVideoUrl('');
+    setInputUrl('');
+    setMaskData(null);
+    setCoords(null);
+    setFrameId(0);
+    setCurrentTime(0);
+    setDuration(0);
+    setTotalFrames(null);
+    setError(null);
   };
 
   return (
@@ -217,32 +265,54 @@ const VideoClickCapture: React.FC = () => {
                 padding: '10px 16px',
                 borderRadius: 8,
                 border: '1px solid #cbd5e1',
+                background: '#fff',
                 boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
                 fontSize: 16,
                 width: 400,
                 marginRight: 12
               }}
+              disabled={videoId === '' && !!inputUrl}
             />
-            <button
-              type="submit"
-              style={{
-                background: '#2563eb',
-                color: 'white',
-                padding: '10px 24px',
-                borderRadius: 8,
-                border: 'none',
-                fontWeight: 600,
-                fontSize: 16,
-                cursor: loading ? 'not-allowed' : 'pointer',
-                boxShadow: '0 1px 4px rgba(0,0,0,0.08)'
-              }}
-              disabled={loading}
-            >
-              {loading ? 'Importing...' : 'Import Video'}
-            </button>
+            {videoId === '' && inputUrl ? (
+              <button
+                type="button"
+                onClick={handleCopyUrl}
+                style={{
+                  background: copied ? '#22c55e' : '#2563eb',
+                  color: 'white',
+                  padding: '10px 24px',
+                  borderRadius: 8,
+                  border: 'none',
+                  fontWeight: 600,
+                  fontSize: 16,
+                  cursor: 'pointer',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.08)'
+                }}
+              >
+                {copied ? 'Copied!' : 'Copy URL'}
+              </button>
+            ) : (
+              <button
+                type="submit"
+                style={{
+                  background: '#2563eb',
+                  color: 'white',
+                  padding: '10px 24px',
+                  borderRadius: 8,
+                  border: 'none',
+                  fontWeight: 600,
+                  fontSize: 16,
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.08)'
+                }}
+                disabled={loading}
+              >
+                {loading ? 'Importing...' : 'Import Video'}
+              </button>
+            )}
           </form>
-          {error && <div className="text-red-500 mb-2" style={{ textAlign: 'left' }}>{error}</div>}
-          {videoUrl && (
+          {error && <div className="text-red-500 mb-2" style={{ textAlign: 'left', color: '#fff' }}>{error}</div>}
+          {videoId && videoUrl && (
             <div style={{ position: 'relative', width: 840, margin: '0 auto' }}>
               <video
                 ref={videoRef}
@@ -286,8 +356,6 @@ const VideoClickCapture: React.FC = () => {
                     height: 48,
                     minWidth: 48,
                     minHeight: 48,
-                    boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
-                    border: '3px solid #2563eb',
                     background: '#fff',
                     margin: 0,
                     borderRadius: '50%'
@@ -324,11 +392,84 @@ const VideoClickCapture: React.FC = () => {
         </div>
         {/* Right column: Buttons, info, status */}
         <div style={{ minWidth: 320, maxWidth: 400, background: '#23232a', borderRadius: 16, padding: 24, color: 'white', minHeight: 500 }}>
-          {videoId && (
+          {/* {videoId && (
             <div className="mb-2 text-green-700" style={{ textAlign: 'center', marginBottom: 24, color: '#4ade80', fontWeight: 600 }}>
               Video ID: {videoId}
             </div>
+          )} */}
+          {!videoId && (
+            <div style={{ color: '#fff', background: 'rgba(36,36,36,0.85)', borderRadius: 16, padding: 20, fontSize: 16, textAlign: 'center', fontWeight: 400, marginBottom: 24 }}>
+              <span style={{ fontSize: 15, color: '#a3a3a3' }}>
+              Precision Smart Crop automatically detects and focuses on objects you select in a video. By clicking on any object, a mask will highlight it, and you can track and crop the video to keep that object in focus throughout the clip. 
+              <br/><br/>This enables precise, object-centric video editing and smart cropping with just a few clicks.
+              </span>
+            </div>
           )}
+          {videoId === '' && inputUrl && (
+            <div style={{ color: '#fff', background: 'rgba(36,36,36,0.85)', borderRadius: 16, padding: 20, fontSize: 16, textAlign: 'center', fontWeight: 400, marginBottom: 24 }}>
+              <span style={{ fontSize: 15, color: '#a3a3a3' }}>
+                The smartcrop URL has been generated!<br/>
+                You can copy it and play around with it.
+              </span>
+            </div>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 32 }}>
+            {(videoId || (videoId === '' && inputUrl)) && <button
+              onClick={handleChangeVideo}
+              style={{
+                width: '100%',
+                background: '#111',
+                color: '#fff',
+                padding: '16px 0',
+                borderRadius: 9999,
+                border: 'none',
+                fontWeight: 600,
+                fontSize: 18,
+                cursor: 'pointer',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 12,
+                letterSpacing: 0.5
+              }}
+            >
+              <span style={{marginLeft: 6}}>Change video</span>
+            </button>}
+            {coords && videoId ? (
+              <button
+                onClick={handleStartOver}
+                style={{
+                  width: '100%',
+                  background: '#111',
+                  color: '#fff',
+                  padding: '16px 0',
+                  borderRadius: 9999,
+                  border: 'none',
+                  fontWeight: 600,
+                  fontSize: 18,
+                  cursor: 'pointer',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 12,
+                  letterSpacing: 0.5
+                }}
+                disabled={!maskData}
+              >
+                <span style={{marginLeft: 6}}>Start over</span>
+              </button>
+            ) : videoId && (
+              <div style={{ color: '#fff', background: 'rgba(36,36,36,0.85)', borderRadius: 16, padding: 20, fontSize: 16, textAlign: 'center', fontWeight: 400 }}>
+                <span style={{ fontSize: 15, color: '#a3a3a3' }}>
+                A mask will appear over the object you select, and you'll be able to focus on and track that object throughout the video.<br/>
+                  <br/>
+                  To start, click any object in the video.
+                </span>
+              </div>
+            )}
+          </div>
           {maskData && (
             <button
               onClick={handleTrackObject}
@@ -350,14 +491,14 @@ const VideoClickCapture: React.FC = () => {
               {trackLoading ? 'Tracking...' : 'Track object'}
             </button>
           )}
-          {coords && (
+          {/* {coords && (
             <div className="mt-4 text-lg" style={{ textAlign: 'center', color: 'white' }}>
               🧭 Clicked Coordinates (Bottom-Left Origin):  <br />
               X: {coords.x}, Y: {coords.y}
               <br />
               📸 Frame ID: {frameId}
             </div>
-          )}
+          )} */}
         </div>
       </div>
     </div>
